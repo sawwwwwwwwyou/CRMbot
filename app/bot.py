@@ -471,31 +471,83 @@ async def handle_edit_field(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Лид не найден")
         return
 
-    field_names = {
-        "brand": "бренд",
-        "request": "запрос",
-        "contact": "контакт",
-        "dates": "даты"
+    field_info = {
+        "brand": ("бренд", "Название компании, например: Magssory"),
+        "request": ("запрос", "Кратко что хотят, например: Интеграция в Reels"),
+        "contact": ("контакт", "Имя контактного лица"),
+        "dates": ("даты", "Любой формат: 12.02.2026, февраль, Q1 и т.д.")
     }
+    
+    field_name, hint = field_info.get(field, (field, ""))
 
     await state.set_state(EditStates.waiting_for_value)
     await state.set_data({"lead_id": lead_id, "field": field})
 
+    # Cancel keyboard
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"cancel_edit:{lead_id}")]
+    ])
+
     await callback.message.edit_text(
-        f"Введите новое значение для поля «{field_names.get(field, field)}»:"
+        f"✏️ Редактирование: *{field_name}*\n\n"
+        f"💡 {hint}\n\n"
+        f"Введите новое значение или нажмите Отмена:",
+        reply_markup=cancel_kb,
+        parse_mode="Markdown"
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cancel_edit:"))
+async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
+    """Cancel editing and return to lead."""
+    user_id = callback.from_user.id
+    lead_id = int(callback.data.split(":")[1])
+    
+    await state.clear()
+    
+    lead = await get_lead(lead_id, user_id)
+    if not lead:
+        await callback.answer("Лид не найден")
+        return
+    
+    messages = await get_lead_messages(lead_id)
+    
+    await callback.message.edit_text(
+        format_lead(lead, len(messages)),
+        reply_markup=get_lead_keyboard(lead_id)
+    )
+    await callback.answer("Редактирование отменено")
 
 
 @router.message(EditStates.waiting_for_value)
 async def handle_edit_value(message: Message, state: FSMContext):
     """Process edited value."""
     user_id = message.from_user.id
+    new_value = message.text.strip()
+    
+    # Check for cancel keywords
+    cancel_keywords = ["нет", "отмена", "cancel", "-", "/cancel"]
+    if new_value.lower() in cancel_keywords:
+        data = await state.get_data()
+        lead_id = data["lead_id"]
+        await state.clear()
+        
+        lead = await get_lead(lead_id, user_id)
+        if lead:
+            messages = await get_lead_messages(lead_id)
+            await message.answer(
+                f"❌ Редактирование отменено.\n\n{format_lead(lead, len(messages))}",
+                reply_markup=get_lead_keyboard(lead_id)
+            )
+        else:
+            await message.answer("❌ Редактирование отменено.")
+        return
 
     data = await state.get_data()
     lead_id = data["lead_id"]
     field = data["field"]
-    new_value = message.text.strip()
 
     field_map = {
         "brand": "brand",
