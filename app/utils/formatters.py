@@ -7,13 +7,16 @@ def format_lead(lead: dict, message_count: int = 0) -> str:
     status = lead.get("status", "new")
     status_emoji = STATUSES.get(status, "🆕")
     status_name = STATUS_NAMES.get(status, "New")
+    is_hot = lead.get("is_hot", False)
 
     brand = lead.get("brand") or "—"
     request = lead.get("request") or "—"
     contact = lead.get("contact_name") or "—"
     dates = lead.get("dates") or "—"
+    
+    hot_badge = "🔥 " if is_hot else ""
 
-    return f"""📥 Лид #{lead['id']}
+    return f"""{hot_badge}📥 Лид #{lead['id']}
 
 🏢 Бренд: {brand}
 📝 Запрос: {request}

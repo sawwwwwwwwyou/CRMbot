@@ -3,7 +3,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from app.config import STATUSES, STATUS_NAMES
 
 
-def get_lead_keyboard(lead_id: int) -> InlineKeyboardMarkup:
+def get_lead_keyboard(lead_id: int, is_hot: bool = False) -> InlineKeyboardMarkup:
     """Create keyboard with status buttons and actions."""
     status_buttons = [
         InlineKeyboardButton(
@@ -18,6 +18,10 @@ def get_lead_keyboard(lead_id: int) -> InlineKeyboardMarkup:
     status_row2 = status_buttons[3:5]  # negotiating, signing
     status_row3 = status_buttons[5:]   # contract, lost
 
+    # Hot toggle button
+    hot_text = "🔥 Важный ✓" if is_hot else "🔥 Важный"
+    hot_button = [InlineKeyboardButton(text=hot_text, callback_data=f"toggle_hot:{lead_id}")]
+
     action_buttons = [
         InlineKeyboardButton(text="📜 Оригиналы", callback_data=f"originals:{lead_id}"),
         InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit:{lead_id}")
@@ -27,6 +31,7 @@ def get_lead_keyboard(lead_id: int) -> InlineKeyboardMarkup:
         status_row1,
         status_row2,
         status_row3,
+        hot_button,
         action_buttons
     ])
 

@@ -110,6 +110,27 @@ async def update_lead_status(lead_id: int, user_id: int, status: str):
     }).eq("id", lead_id).eq("user_id", user_id).execute()
 
 
+async def toggle_lead_hot(lead_id: int, user_id: int) -> bool:
+    """Toggle is_hot flag for a lead. Returns new value."""
+    # Get current value
+    result = supabase.table("leads")\
+        .select("is_hot")\
+        .eq("id", lead_id)\
+        .eq("user_id", user_id)\
+        .single()\
+        .execute()
+    
+    current = result.data.get("is_hot", False) if result.data else False
+    new_value = not current
+    
+    supabase.table("leads").update({
+        "is_hot": new_value,
+        "updated_at": datetime.utcnow().isoformat()
+    }).eq("id", lead_id).eq("user_id", user_id).execute()
+    
+    return new_value
+
+
 async def update_lead_field(lead_id: int, user_id: int, field: str, value: str):
     """Update a specific lead field (only if belongs to user)."""
     supabase.table("leads").update({

@@ -15,7 +15,7 @@ from app.services.database import (
     create_lead, get_lead, get_lead_messages, update_lead_status,
     get_leads_by_status, search_leads, get_stats, get_recent_lead_by_contact,
     add_messages_to_lead, update_lead_parsed_data, get_all_messages_text,
-    update_lead_field
+    update_lead_field, toggle_lead_hot
 )
 from app.services.ai_parser import parse_messages
 from app.utils.keyboards import (
@@ -146,7 +146,7 @@ async def create_new_lead_from_messages(chat_id: int, user_id: int, messages: li
     await bot.send_message(
         chat_id,
         format_new_lead(lead, message_count),
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
 
 
@@ -175,7 +175,7 @@ async def cmd_start(message: Message):
             messages = await get_lead_messages(lead_id)
             await message.answer(
                 format_lead(lead, len(messages)),
-                reply_markup=get_lead_keyboard(lead_id)
+                reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
             )
             return
         
@@ -198,15 +198,20 @@ async def cmd_start(message: Message):
 
 def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
     """Format leads as clickable deep links, grouped by status.
+    Hot leads shown first within each status group.
     Returns (text, total_pages)."""
     
-    # Group leads by status
+    # Group leads by status, sort hot leads first
     by_status = {}
     for lead in leads:
         status = lead.get("status", "new")
         if status not in by_status:
             by_status[status] = []
         by_status[status].append(lead)
+    
+    # Sort each group: hot leads first
+    for status in by_status:
+        by_status[status].sort(key=lambda x: (not x.get("is_hot", False), x.get("id")))
     
     # Build text in reverse status order (contract first)
     lines = ["📋 *Все лиды:*\n"]
@@ -222,8 +227,10 @@ def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
                 brand = lead.get("brand") or "Без бренда"
                 if len(brand) > 25:
                     brand = brand[:22] + "..."
+                # Hot badge
+                hot = "🔥" if lead.get("is_hot") else ""
                 # Deep link format
-                link = f"[{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+                link = f"[{hot}{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
                 lines.append(link)
     
     total_leads = len(all_leads_ordered)
@@ -368,9 +375,31 @@ async def handle_status_change(callback: CallbackQuery):
 
     await callback.message.edit_text(
         format_lead(lead, len(messages)),
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
     await callback.answer("Статус изменён")
+
+
+@router.callback_query(F.data.startswith("toggle_hot:"))
+async def handle_toggle_hot(callback: CallbackQuery):
+    """Toggle hot/important flag for a lead."""
+    user_id = callback.from_user.id
+    lead_id = int(callback.data.split(":")[1])
+
+    new_value = await toggle_lead_hot(lead_id, user_id)
+
+    lead = await get_lead(lead_id, user_id)
+    if not lead:
+        await callback.answer("Лид не найден")
+        return
+
+    messages = await get_lead_messages(lead_id)
+
+    await callback.message.edit_text(
+        format_lead(lead, len(messages)),
+        reply_markup=get_lead_keyboard(lead_id, is_hot=new_value)
+    )
+    await callback.answer("🔥 Важный!" if new_value else "Снято")
 
 
 @router.callback_query(F.data.startswith("originals:"))
@@ -414,7 +443,7 @@ async def handle_back(callback: CallbackQuery):
 
     await callback.message.edit_text(
         format_lead(lead, len(messages)),
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
     await callback.answer()
 
@@ -434,7 +463,7 @@ async def handle_view_lead(callback: CallbackQuery):
 
     await callback.message.edit_text(
         format_lead(lead, len(messages)),
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
     await callback.answer()
 
@@ -516,7 +545,7 @@ async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         format_lead(lead, len(messages)),
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
     await callback.answer("Редактирование отменено")
 
@@ -539,7 +568,7 @@ async def handle_edit_value(message: Message, state: FSMContext):
             messages = await get_lead_messages(lead_id)
             await message.answer(
                 f"❌ Редактирование отменено.\n\n{format_lead(lead, len(messages))}",
-                reply_markup=get_lead_keyboard(lead_id)
+                reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
             )
         else:
             await message.answer("❌ Редактирование отменено.")
@@ -566,7 +595,7 @@ async def handle_edit_value(message: Message, state: FSMContext):
 
     await message.answer(
         f"✅ Обновлено!\n\n{format_lead(lead, len(messages))}",
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
 
 
@@ -609,7 +638,7 @@ async def handle_add_to_lead(callback: CallbackQuery):
 
     await callback.message.edit_text(
         f"📎 Добавлено {len(messages)} сообщений!\n\n{format_lead(lead, len(all_messages))}",
-        reply_markup=get_lead_keyboard(lead_id)
+        reply_markup=get_lead_keyboard(lead_id, lead.get("is_hot", False))
     )
     await callback.answer()
 
