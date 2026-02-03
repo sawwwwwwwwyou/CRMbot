@@ -13,6 +13,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BATCH_TIMEOUT_SECONDS = 1.0  # Wait 1 second for more messages
 SAME_LEAD_WINDOW_MINUTES = 30  # Window to add to existing lead
 
+# Bot username (without @) for deep links
+BOT_USERNAME = os.getenv("BOT_USERNAME", "savefornow_bot")
+
 # Status definitions
 STATUSES = {
     "new": "🆕",
@@ -33,3 +36,9 @@ STATUS_NAMES = {
     "contract": "Contract",
     "lost": "Lost",
 }
+
+# Order for displaying leads (top to bottom)
+STATUS_ORDER = ["contract", "signing", "negotiating", "waiting", "replied", "new", "lost"]
+
+# Pagination
+LEADS_PER_PAGE = 15

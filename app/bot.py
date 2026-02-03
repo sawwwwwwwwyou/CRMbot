@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.config import BOT_TOKEN, BATCH_TIMEOUT_SECONDS, SAME_LEAD_WINDOW_MINUTES
+from app.config import BOT_TOKEN, BATCH_TIMEOUT_SECONDS, SAME_LEAD_WINDOW_MINUTES, BOT_USERNAME, STATUS_ORDER, STATUSES, LEADS_PER_PAGE
 from app.services.database import (
     create_lead, get_lead, get_lead_messages, update_lead_status,
     get_leads_by_status, search_leads, get_stats, get_recent_lead_by_contact,
@@ -154,7 +154,38 @@ async def create_new_lead_from_messages(chat_id: int, user_id: int, messages: li
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Handle /start command."""
+    """Handle /start command with deep link support."""
+    user_id = message.from_user.id
+    
+    # Check for deep link parameters
+    args = message.text.split(maxsplit=1)
+    if len(args) > 1:
+        param = args[1]
+        
+        # Handle lead deep link: lead_123 or lead_123_page_2
+        if param.startswith("lead_"):
+            parts = param.replace("lead_", "").split("_page_")
+            lead_id = int(parts[0])
+            
+            lead = await get_lead(lead_id, user_id)
+            if not lead:
+                await message.answer("❌ Лид не найден или у вас нет доступа.")
+                return
+            
+            messages = await get_lead_messages(lead_id)
+            await message.answer(
+                format_lead(lead, len(messages)),
+                reply_markup=get_lead_keyboard(lead_id)
+            )
+            return
+        
+        # Handle leads page deep link: leads_page_2
+        if param.startswith("leads_page_"):
+            page = int(param.replace("leads_page_", ""))
+            await show_leads_page(message, user_id, page)
+            return
+    
+    # Default start message
     await message.answer(
         "🤖 CRM Бот запущен!\n\n"
         "Перешлите мне сообщения от рекламодателей, и я создам лид.\n\n"
@@ -165,20 +196,84 @@ async def cmd_start(message: Message):
     )
 
 
+def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
+    """Format leads as clickable deep links, grouped by status.
+    Returns (text, total_pages)."""
+    
+    # Group leads by status
+    by_status = {}
+    for lead in leads:
+        status = lead.get("status", "new")
+        if status not in by_status:
+            by_status[status] = []
+        by_status[status].append(lead)
+    
+    # Build text in reverse status order (contract first)
+    lines = ["📋 *Все лиды:*\n"]
+    all_leads_ordered = []
+    
+    for status in STATUS_ORDER:
+        if status in by_status:
+            status_emoji = STATUSES.get(status, "❓")
+            lines.append(f"\n*{status_emoji} {status.upper()}*")
+            
+            for lead in by_status[status]:
+                all_leads_ordered.append(lead)
+                brand = lead.get("brand") or "Без бренда"
+                if len(brand) > 25:
+                    brand = brand[:22] + "..."
+                # Deep link format
+                link = f"[{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+                lines.append(link)
+    
+    total_leads = len(all_leads_ordered)
+    total_pages = (total_leads + LEADS_PER_PAGE - 1) // LEADS_PER_PAGE
+    if total_pages == 0:
+        total_pages = 1
+    
+    # Add pagination info
+    if total_pages > 1:
+        lines.append(f"\n📄 Страница {page}/{total_pages}")
+    
+    return "\n".join(lines), total_pages
+
+
+async def show_leads_page(message: Message, user_id: int, page: int = 1):
+    """Show leads list with pagination."""
+    leads = await get_leads_by_status(user_id)
+    
+    if not leads:
+        await message.answer("📋 Нет лидов.")
+        return
+    
+    text, total_pages = format_leads_as_links(leads, page)
+    
+    # Build pagination keyboard if needed
+    keyboard = None
+    if total_pages > 1:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        buttons = []
+        if page > 1:
+            buttons.append(InlineKeyboardButton(
+                text="⬅️ Назад",
+                url=f"https://t.me/{BOT_USERNAME}?start=leads_page_{page-1}"
+            ))
+        if page < total_pages:
+            buttons.append(InlineKeyboardButton(
+                text="Вперёд ➡️",
+                url=f"https://t.me/{BOT_USERNAME}?start=leads_page_{page+1}"
+            ))
+        if buttons:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons])
+    
+    await message.answer(text, reply_markup=keyboard, parse_mode="Markdown", disable_web_page_preview=True)
+
+
 @router.message(Command("leads"))
 async def cmd_leads(message: Message):
     """Handle /leads command."""
     user_id = message.from_user.id
-    leads = await get_leads_by_status(user_id)
-    
-    if not leads:
-        await message.answer("Нет лидов.")
-        return
-    
-    await message.answer(
-        "📋 Все лиды (нажмите для деталей):",
-        reply_markup=get_leads_list_keyboard(leads)
-    )
+    await show_leads_page(message, user_id, page=1)
 
 
 @router.message(Command("search"))
