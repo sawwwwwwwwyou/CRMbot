@@ -1,21 +1,22 @@
 """Inline keyboards for the bot."""
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from app.config import STATUSES
+from app.config import STATUSES, STATUS_NAMES
 
 
 def get_lead_keyboard(lead_id: int) -> InlineKeyboardMarkup:
     """Create keyboard with status buttons and actions."""
     status_buttons = [
         InlineKeyboardButton(
-            text=emoji,
+            text=f"{emoji} {STATUS_NAMES.get(status, status)}",
             callback_data=f"status:{lead_id}:{status}"
         )
         for status, emoji in STATUSES.items()
     ]
 
-    # Split into two rows (4 + 3)
-    status_row1 = status_buttons[:4]
-    status_row2 = status_buttons[4:]
+    # Split into rows of 2-3 buttons for better readability with text
+    status_row1 = status_buttons[:3]  # new, replied, waiting
+    status_row2 = status_buttons[3:5]  # negotiating, signing
+    status_row3 = status_buttons[5:]   # contract, lost
 
     action_buttons = [
         InlineKeyboardButton(text="📜 Оригиналы", callback_data=f"originals:{lead_id}"),
@@ -25,6 +26,7 @@ def get_lead_keyboard(lead_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         status_row1,
         status_row2,
+        status_row3,
         action_buttons
     ])
 
