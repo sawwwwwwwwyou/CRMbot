@@ -197,26 +197,38 @@ async def cmd_start(message: Message):
 
 
 def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
-    """Format leads as clickable deep links, grouped by status.
-    Hot leads shown first within each status group.
+    """Format leads as clickable deep links.
+    Hot leads shown at the top, then grouped by status.
     Returns (text, total_pages)."""
     
-    # Group leads by status, sort hot leads first
+    # Separate hot and regular leads
+    hot_leads = [l for l in leads if l.get("is_hot")]
+    regular_leads = [l for l in leads if not l.get("is_hot")]
+    
+    # Group regular leads by status
     by_status = {}
-    for lead in leads:
+    for lead in regular_leads:
         status = lead.get("status", "new")
         if status not in by_status:
             by_status[status] = []
         by_status[status].append(lead)
     
-    # Sort each group: hot leads first
-    for status in by_status:
-        by_status[status].sort(key=lambda x: (not x.get("is_hot", False), x.get("id")))
-    
-    # Build text in reverse status order (contract first)
     lines = ["📋 *Все лиды:*\n"]
     all_leads_ordered = []
     
+    # Show hot leads first
+    if hot_leads:
+        lines.append("\n*🔥 ВАЖНЫЕ*")
+        for lead in hot_leads:
+            all_leads_ordered.append(lead)
+            status_emoji = STATUSES.get(lead.get("status", "new"), "❓")
+            brand = lead.get("brand") or "Без бренда"
+            if len(brand) > 25:
+                brand = brand[:22] + "..."
+            link = f"[🔥{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+            lines.append(link)
+    
+    # Then show rest by status
     for status in STATUS_ORDER:
         if status in by_status:
             status_emoji = STATUSES.get(status, "❓")
@@ -227,10 +239,7 @@ def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
                 brand = lead.get("brand") or "Без бренда"
                 if len(brand) > 25:
                     brand = brand[:22] + "..."
-                # Hot badge
-                hot = "🔥" if lead.get("is_hot") else ""
-                # Deep link format
-                link = f"[{hot}{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+                link = f"[{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
                 lines.append(link)
     
     total_leads = len(all_leads_ordered)
