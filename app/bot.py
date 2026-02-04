@@ -203,11 +203,11 @@ def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
     
     # Separate hot and regular leads
     hot_leads = [l for l in leads if l.get("is_hot")]
-    regular_leads = [l for l in leads if not l.get("is_hot")]
+    # regular_leads are now ALL leads for the status grouping, as requested to show duplicates
     
-    # Group regular leads by status
+    # Group ALL leads by status
     by_status = {}
-    for lead in regular_leads:
+    for lead in leads:
         status = lead.get("status", "new")
         if status not in by_status:
             by_status[status] = []
@@ -225,7 +225,8 @@ def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
             brand = lead.get("brand") or "Без бренда"
             if len(brand) > 25:
                 brand = brand[:22] + "..."
-            link = f"[🔥{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+            # Format:  • #1 [magssory](url) ⏳
+            link = f" • #{lead['id']} [{brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']}) {status_emoji}"
             lines.append(link)
     
     # Then show rest by status
@@ -239,7 +240,8 @@ def format_leads_as_links(leads: list[dict], page: int = 1) -> tuple[str, int]:
                 brand = lead.get("brand") or "Без бренда"
                 if len(brand) > 25:
                     brand = brand[:22] + "..."
-                link = f"[{status_emoji} #{lead['id']} {brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
+                # Format: • #2 [Перекрёсток](url)
+                link = f" • #{lead['id']} [{brand}](https://t.me/{BOT_USERNAME}?start=lead_{lead['id']})"
                 lines.append(link)
     
     total_leads = len(all_leads_ordered)
