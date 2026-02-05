@@ -12,6 +12,9 @@ def format_lead(lead: dict, message_count: int = 0) -> str:
     brand = lead.get("brand") or "—"
     request = lead.get("request") or "—"
     contact = lead.get("contact_name") or "—"
+    username = lead.get("contact_username")
+    if contact != "—" and username:
+        contact = f"{contact} @{username}"
     dates = lead.get("dates") or "—"
     
     hot_badge = "🔥 " if is_hot else ""
@@ -36,6 +39,9 @@ def format_new_lead(lead: dict, message_count: int) -> str:
     brand = lead.get("brand") or "—"
     request = lead.get("request") or "—"
     contact = lead.get("contact_name") or "—"
+    username = lead.get("contact_username")
+    if contact != "—" and username:
+        contact = f"{contact} @{username}"
     dates = lead.get("dates") or "—"
 
     return f"""📥 Новый лид!
@@ -54,6 +60,9 @@ def format_lead_short(lead: dict) -> str:
     status_emoji = STATUSES.get(lead.get("status", "new"), "🆕")
     brand = lead.get("brand") or "Без бренда"
     contact = lead.get("contact_name") or ""
+    username = lead.get("contact_username")
+    if contact and username:
+        contact = f"{contact} @{username}"
 
     text = f"{status_emoji} #{lead['id']} {brand}"
     if contact:
